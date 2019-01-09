@@ -21,7 +21,7 @@ int leftM = 13;
 
 /* Definicao de Variaveis Auxiliares */
 char dir[2] = {'s','s'};
-int optMode = 2;          // variavel para definir o modo de operacao "1.SemiAuto"/"2.Manual"/"3.Auto"
+int optMode = 1;          // variavel para definir o modo de operacao "1.SemiAuto"/"2.Manual"/"3.Auto"
 int feedbackSensor[4] = {0,0,0,0};  // armazena a leitura dos valores dos sensores ultrassonicos
 const int gabarito[8][4] = {
   {1,0,0,0},
@@ -47,7 +47,7 @@ void loop() {
   
   if (cmd == 't') {
     optMode = 1;
-    //activateSemiAutoMode();
+    activateSemiAutoMode();
   } else if (cmd == 'm') {
     optMode = 2;
     activateManualMode();
@@ -67,7 +67,7 @@ while(optMode == 3) {
   // Muda para Modo Semi Automatico
   if (cmd == 't') {
     optMode = 1;
-    //activateSemiAutoMode();
+    activateSemiAutoMode();
   }
   
   // Muda para Modo Manual 
@@ -144,6 +144,104 @@ while(optMode == 3) {
   delay(200);
 }}
 
+/********** SEMIAUTOMATIC FUNCTION **********/
+void activateSemiAutoMode() {
+  /* Modo Semi Automatico */
+  Serial.print("\t\tSEMIAUTOMATIC MODE\n");
+while(optMode == 1) {
+  char cmd = Serial.read();
+  
+  feedbackSensor[0] = sensor(0,20);
+  feedbackSensor[1] = sensor(1,20);
+  feedbackSensor[2] = sensor(2,20);
+  feedbackSensor[3] = sensor(3,20);
+  
+  printEstadoSensores();
+
+  switch (cmd) {
+    case 'f':
+      // requisicao para andar para frente
+      if (!feedbackSensor[0]) {
+        // se nao houver obstaculo a frente, permite o movimento
+        if (dir[0] == 'f') {  dir[1] = 's'; }
+        moveForward(dir[1]);
+      }
+      dir[0] = 'f';
+      break;
+    case 'b':
+      // requisicao para andar para tras
+      if (!feedbackSensor[1]) {
+        // se nao houver obstaculo atras, permite o movimento
+        if (dir[0] == 'b') {  dir[1] = 's'; }
+        moveBackward(dir[1]);
+      }
+      dir[0] = 'b';
+      break;
+    case 'l':
+      // requisicao para fazer curva a esquerda
+      if (!feedbackSensor[2]) {
+        // se nao houver obstaculo a esquerda, permite o movimento para frente e para esquerda
+        analogWrite(speedLeftM, 110);  analogWrite(speedRightM, 242);
+        Serial.println("left");
+      }
+      dir[1] = 'l';
+      break;
+    case 'r':
+      // requisicao para fazer curva a direita
+      if (!feedbackSensor[3]) {
+        // se nao houver obstaculo a direita, permite o movimento para frente e para direita
+        analogWrite(speedLeftM, 242);  analogWrite(speedRightM, 110);
+        Serial.println("right");
+      }
+      dir[1] = 'r';
+      break;
+    case 'z':
+      // requisicao para rotacionar sobre o eixo a esquerda
+      if (!feedbackSensor[2]) { rotateLeft(); }
+      dir[0] = 's'; dir[1] = 'l';
+      break;
+    case 'x':
+      // requisicao para rotacionar sobre o eixo a direita
+      if (!feedbackSensor[3]) { rotateRight();  }
+      dir[0] = 's'; dir[1] = 'r';
+      break;
+    case 's':
+      // comando de parada
+      stopMoving();
+      dir[0] = 's'; dir[1] = 's';
+      break;
+    case 'm':
+      // Muda para Modo Manual
+      optMode=2;
+      activateManualMode();
+      break;
+    case 'a':
+      // Muda para Modo Automatico
+      optMode=3;
+      activateAutomaticMode();
+      break;
+    default:
+      // continua seguindo a direcao do ultimo comando dado ate encontrar um obstaculo
+      if (dir[0] == 'f') {
+        if(feedbackSensor[0]) { stopMoving(); }
+        else moveForward(dir[1]);
+      } else if (dir[0] == 'b') {
+        if (feedbackSensor[1]) { stopMoving(); }
+        else moveBackward(dir[1]);
+      }
+      else if (dir[1] == 'l') {
+        if (feedbackSensor[2]) {  stopMoving(); }
+        else rotateLeft();
+      } else if (dir[1] == 'r') {
+        if (feedbackSensor[3]) { stopMoving();  }
+        else rotateRight();
+      }
+      break;
+  }
+  
+  delay(400);
+}}
+
 /********** MANUAL FUNCTION **********/
 void activateManualMode() {
   /* Modo Manual */
@@ -215,7 +313,7 @@ while(optMode == 2) {
     case 't':
       // Muda para Modo Semi Automatico
       optMode=1;
-      //activateSemiAutoMode();
+      activateSemiAutoMode();
       break;
     case 'a':
       // Muda para Modo Automatico
@@ -263,12 +361,22 @@ void moveForward(char dir) {
   digitalWrite(leftM, HIGH); digitalWrite(rightM, HIGH);
   switch (dir) {
     case 'l':
-      // movimento para frente virando levemente a esquerda
-      analogWrite(speedLeftM, 110);  analogWrite(speedRightM, 242);
+      if (!feedbackSensor[2]) {
+        // se nao identificou obstaculo a esquerda, movimento para frente virando levemente a esquerda
+        analogWrite(speedLeftM, 110);  analogWrite(speedRightM, 242);
+      } else {
+          // caso haja obstaculo a esquerda, anda em linha reta
+          analogWrite(speedRightM, nv1L);  analogWrite(speedLeftM, nv1R);
+      }
       break;
     case 'r':
-      // movimento para frente virando levemente a direita
-      analogWrite(speedLeftM, 242);  analogWrite(speedRightM, 110);
+      // se nao identificou obstaculo a direita, movimento para frente virando levemente a direita
+      if (!feedbackSensor[3]) {
+        analogWrite(speedLeftM, 242);  analogWrite(speedRightM, 110);
+      } else {
+          // caso haja obstaculo a direita, anda em linha reta
+          analogWrite(speedRightM, nv1L);  analogWrite(speedLeftM, nv1R);
+      }
       break;
     default:
       // movimento para frente em linha reta
@@ -281,12 +389,22 @@ void moveBackward(char dir) {
   digitalWrite(leftM, LOW); digitalWrite(rightM, LOW);
   switch (dir) {
     case 'l':
-      // movimento para tras virando levemente a esquerda
-      analogWrite(speedLeftM, 110);  analogWrite(speedRightM, 242);
+      if (!feedbackSensor[2]) {
+        // se nao identificou obstaculo a esquerda, movimento para tras virando levemente a esquerda
+        analogWrite(speedLeftM, 110);  analogWrite(speedRightM, 242);
+      } else {
+          // caso haja obstaculo a esquerda, anda em linha reta
+          analogWrite(speedRightM, nv1L);  analogWrite(speedLeftM, nv1R);
+      }
       break;
     case 'r':
-      // movimento para tras virando levemente a direita
-      analogWrite(speedLeftM, 242);  analogWrite(speedRightM, 110);
+      if (!feedbackSensor[3]) {
+        // se nao identificou obstaculo a direita, movimento para tras virando levemente a direita
+        analogWrite(speedLeftM, 242);  analogWrite(speedRightM, 110);
+      } else {
+          // caso haja obstaculo a direita, anda em linha reta
+          analogWrite(speedRightM, nv1L);  analogWrite(speedLeftM, nv1R);
+      }
       break;
     default:
       // movimento para tras em linha reta
